@@ -9,8 +9,11 @@ const CHAT_IDS = process.env.CHAT_IDS.split(',').map(id => id.trim());
 const CHAT_URL = 'https://asstars.club/engine/ajax/controller.php?mod=light_chat';
 
 let sessionCookie = null;
+let lastId = null;
 
 const bot = new TelegramBot(TELEGRAM_TOKEN);
+
+// --- ФУНКЦИИ ---
 
 async function loginAndGetCookie() {
     const resp = await fetch('https://asstars.club/login/', {
@@ -21,10 +24,8 @@ async function loginAndGetCookie() {
         },
         body: `login=${encodeURIComponent(LOGIN)}&password=${encodeURIComponent(PASSWORD)}`
     });
-    // Cookie обычно приходит в set-cookie (может быть массив)
     const setCookie = resp.headers.raw()['set-cookie'];
     if (!setCookie) throw new Error('No cookie received');
-    // Обычно нужная PHPSESSID или похожее
     sessionCookie = setCookie.map(s => s.split(';')[0]).join('; ');
     console.log('[SkyStone] Получена кука:', sessionCookie);
 }
@@ -51,8 +52,6 @@ async function fetchChat() {
     return await resp.text();
 }
 
-let lastId = null;
-
 function parseChat(html) {
     const regex = /<li data-id="(\d+)"[\s\S]+?<a [^>]+class="lc_chat_li_autor[^"]*"[^>]*>(.*?)<\/a>[\s\S]+?<div class="lc_chat_li_text"[^>]*>(.*?)<\/div>/g;
     let messages = [];
@@ -67,5 +66,23 @@ function parseChat(html) {
     return messages;
 }
 
-// Какая фраза нам нужна:
+// --- СТАРТ ---
 
+async function main() {
+    try {
+        await loginAndGetCookie();
+
+        setInterval(async () => {
+            try {
+                const html = await fetchChat();
+                const messages = parseChat(html);
+
+                if (messages.length) {
+                    const last = messages[messages.length - 1];
+                    console.log(`[SkyStone] ${last.author}: ${last.text}`);
+                    // Можно добавить проверку и отправку в телегу
+                }
+            } catch (err) {
+                console.error('[SkyStone] Ошибка при обновлении чата:', err);
+            }
+        },
