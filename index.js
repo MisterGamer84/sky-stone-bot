@@ -76,7 +76,7 @@ async function main() {
     try {
         await loginAndGetCookie();
 
-        setInterval(async () => {
+                setInterval(async () => {
             try {
                 const html = await fetchChat();
                 const messages = parseChat(html);
@@ -89,4 +89,11 @@ async function main() {
             } catch (err) {
                 console.error('[SkyStone] Ошибка при обновлении чата:', err);
             }
-        },
+        }, 20000); // <-- Обязательно число и закрытие скобки!
+    } catch (err) {
+        console.error('[SkyStone] Не удалось запустить:', err);
+        process.exit(1);
+    }
+}
+
+main();
