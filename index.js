@@ -1,81 +1,71 @@
-// index.js
 const fetch = require('node-fetch');
-const cheerio = require('cheerio');
-require('dotenv').config();
+const TelegramBot = require('node-telegram-bot-api');
 
+const LOGIN = process.env.LOGIN;
+const PASSWORD = process.env.PASSWORD;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
-const CHAT_IDS = process.env.CHAT_IDS?.split(',').map(id => id.trim()).filter(Boolean);
-const CHECK_INTERVAL = Number(process.env.CHECK_INTERVAL || 20); // секунд
+const CHAT_IDS = process.env.CHAT_IDS.split(',').map(id => id.trim());
 
-const CHAT_URL = "https://asstars.club/engine/ajax/controller.php?mod=light_chat";
-const TARGET_USER = "ИИ Космический посикунчик";
-const TARGET_PHRASE = "Шпион демонической секты отобрал 300 мешков с камнями духа, помогите их собрать";
+const CHAT_URL = 'https://asstars.club/engine/ajax/controller.php?mod=light_chat';
 
-let lastProcessedId = null;
+let sessionCookie = null;
+
+const bot = new TelegramBot(TELEGRAM_TOKEN);
+
+async function loginAndGetCookie() {
+    const resp = await fetch('https://asstars.club/login/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': 'Mozilla/5.0'
+        },
+        body: `login=${encodeURIComponent(LOGIN)}&password=${encodeURIComponent(PASSWORD)}`
+    });
+    // Cookie обычно приходит в set-cookie (может быть массив)
+    const setCookie = resp.headers.raw()['set-cookie'];
+    if (!setCookie) throw new Error('No cookie received');
+    // Обычно нужная PHPSESSID или похожее
+    sessionCookie = setCookie.map(s => s.split(';')[0]).join('; ');
+    console.log('[SkyStone] Получена кука:', sessionCookie);
+}
 
 async function fetchChat() {
-  const res = await fetch(CHAT_URL, {
-    method: "POST",
-    headers: {
-      "accept": "text/html,application/xhtml+xml,application/xml",
-      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+    if (!sessionCookie) await loginAndGetCookie();
+    let resp = await fetch(CHAT_URL, {
+        headers: {
+            'Cookie': sessionCookie,
+            'User-Agent': 'Mozilla/5.0'
+        }
+    });
+    if (resp.status === 403 || resp.status === 401) {
+        console.log('[SkyStone] Кука устарела, пробую логиниться заново...');
+        await loginAndGetCookie();
+        resp = await fetch(CHAT_URL, {
+            headers: {
+                'Cookie': sessionCookie,
+                'User-Agent': 'Mozilla/5.0'
+            }
+        });
     }
-  });
-  if (!res.ok) throw new Error("Чат недоступний: " + res.status);
-  return await res.text();
+    if (!resp.ok) throw new Error('Чат недоступен: ' + resp.status);
+    return await resp.text();
 }
 
-function extractStoneMessageId(html) {
-  const $ = cheerio.load(html);
-  const items = $('[data-id]');
-  let found = null;
+let lastId = null;
 
-  items.each((i, el) => {
-    const $el = $(el);
-    const user = $el.find('.lc_chat_li_autor').text().trim();
-    const text = $el.find('.lc_chat_li_text').text().trim();
-    const id = $el.attr('data-id');
-    if (
-      user === TARGET_USER &&
-      text.includes(TARGET_PHRASE)
-    ) {
-      found = id;
+function parseChat(html) {
+    const regex = /<li data-id="(\d+)"[\s\S]+?<a [^>]+class="lc_chat_li_autor[^"]*"[^>]*>(.*?)<\/a>[\s\S]+?<div class="lc_chat_li_text"[^>]*>(.*?)<\/div>/g;
+    let messages = [];
+    let m;
+    while ((m = regex.exec(html))) {
+        messages.push({
+            id: m[1],
+            author: m[2].replace(/(<([^>]+)>)/gi, '').trim(),
+            text: m[3].replace(/(<([^>]+)>)/gi, '').trim()
+        });
     }
-  });
-
-  return found;
+    return messages;
 }
 
-async function sendTelegramAlert(message) {
-  if (!TELEGRAM_TOKEN || !CHAT_IDS?.length) return;
-  for (const chatId of CHAT_IDS) {
-    await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: `⚠️ В чаті з’явилося повідомлення:\n\n<code>${message}</code>`,
-        parse_mode: "HTML"
-      })
-    }).catch(console.error);
-  }
-}
-
-async function check() {
-  try {
-    const html = await fetchChat();
-    const msgId = extractStoneMessageId(html);
-    if (msgId && msgId !== lastProcessedId) {
-      lastProcessedId = msgId;
-      const message = `Знайдено небесний камінь: ${msgId}`;
-      console.log(`[SkyStone] ${message}`);
-      await sendTelegramAlert(message);
-    }
-  } catch (e) {
-    console.warn("[SkyStone] Error:", e.message);
-  }
-}
-
-console.log(`[SkyStone] Старт сервера, интервал проверки: ${CHECK_INTERVAL} сек.`);
-setInterval(check, CHECK_INTERVAL * 1000);
-check();
+// Какая фраза нам нужна:
+const KEY_PH
