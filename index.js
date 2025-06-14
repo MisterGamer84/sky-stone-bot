@@ -1,5 +1,9 @@
 const fetch = require('node-fetch');
 const TelegramBot = require('node-telegram-bot-api');
+console.log('LOGIN:', process.env.LOGIN);
+console.log('PASSWORD:', process.env.PASSWORD);
+console.log('TELEGRAM_TOKEN:', process.env.TELEGRAM_TOKEN);
+console.log('CHAT_IDS:', process.env.CHAT_IDS);
 
 const LOGIN = process.env.LOGIN;
 const PASSWORD = process.env.PASSWORD;
