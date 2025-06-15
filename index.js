@@ -1,7 +1,3 @@
-console.log('LOGIN:', process.env.LOGIN);
-console.log('PASSWORD:', process.env.PASSWORD);
-console.log('TELEGRAM_TOKEN:', process.env.TELEGRAM_TOKEN);
-console.log('CHAT_IDS:', process.env.CHAT_IDS);
 const fetch = require('node-fetch');
 const TelegramBot = require('node-telegram-bot-api');
 
@@ -17,17 +13,19 @@ let lastId = null;
 
 const bot = new TelegramBot(TELEGRAM_TOKEN);
 
-// --- ФУНКЦИИ ---
-
+// --- Получаем куки авторизации через форму входа ---
 async function loginAndGetCookie() {
-    const resp = await fetch('https://asstars.club/login/', {
+    // Обрати внимание на поля формы!
+    const body = `login_name=${encodeURIComponent(LOGIN)}&login_password=${encodeURIComponent(PASSWORD)}&login=submit`;
+    const resp = await fetch('https://asstars.club/', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
             'User-Agent': 'Mozilla/5.0'
         },
-        body: `login_name=${encodeURIComponent(LOGIN)}&login_password=${encodeURIComponent(PASSWORD)}&login=submit`
+        body
     });
+    // Собираем ВСЕ куки (а не только первую)
     const setCookie = resp.headers.raw()['set-cookie'];
     if (!setCookie) throw new Error('No cookie received');
     sessionCookie = setCookie.map(s => s.split(';')[0]).join('; ');
@@ -37,19 +35,25 @@ async function loginAndGetCookie() {
 async function fetchChat() {
     if (!sessionCookie) await loginAndGetCookie();
     let resp = await fetch(CHAT_URL, {
+        method: 'POST',
         headers: {
             'Cookie': sessionCookie,
-            'User-Agent': 'Mozilla/5.0'
-        }
+            'User-Agent': 'Mozilla/5.0',
+            'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: 'do=update&page_id=' // <- важно! иначе будет 403!
     });
     if (resp.status === 403 || resp.status === 401) {
         console.log('[SkyStone] Кука устарела, пробую логиниться заново...');
         await loginAndGetCookie();
         resp = await fetch(CHAT_URL, {
+            method: 'POST',
             headers: {
                 'Cookie': sessionCookie,
-                'User-Agent': 'Mozilla/5.0'
-            }
+                'User-Agent': 'Mozilla/5.0',
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: 'do=update&page_id='
         });
     }
     if (!resp.ok) throw new Error('Чат недоступен: ' + resp.status);
@@ -71,12 +75,11 @@ function parseChat(html) {
 }
 
 // --- СТАРТ ---
-
 async function main() {
     try {
         await loginAndGetCookie();
 
-                setInterval(async () => {
+        setInterval(async () => {
             try {
                 const html = await fetchChat();
                 const messages = parseChat(html);
@@ -84,12 +87,12 @@ async function main() {
                 if (messages.length) {
                     const last = messages[messages.length - 1];
                     console.log(`[SkyStone] ${last.author}: ${last.text}`);
-                    // Можно добавить проверку и отправку в телегу
+                    // Тут можешь добавить отправку в Телегу
                 }
             } catch (err) {
                 console.error('[SkyStone] Ошибка при обновлении чата:', err);
             }
-        }, 20000); // <-- Обязательно число и закрытие скобки!
+        }, 20000);
     } catch (err) {
         console.error('[SkyStone] Не удалось запустить:', err);
         process.exit(1);
