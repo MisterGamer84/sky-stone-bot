@@ -26,7 +26,7 @@ async function loginAndGetCookie() {
             'Content-Type': 'application/x-www-form-urlencoded',
             'User-Agent': 'Mozilla/5.0'
         },
-        body: `login=${encodeURIComponent(LOGIN)}&password=${encodeURIComponent(PASSWORD)}`
+        body: `login_name=${encodeURIComponent(LOGIN)}&login_password=${encodeURIComponent(PASSWORD)}&login=submit`
     });
     const setCookie = resp.headers.raw()['set-cookie'];
     if (!setCookie) throw new Error('No cookie received');
